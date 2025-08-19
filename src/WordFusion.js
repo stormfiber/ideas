@@ -56,101 +56,166 @@ const WordFusionApp = () => {
     setIsLoading(true);
     setIdeas('');
 
+    // Always start with built-in generation for reliability
+    // Try Google Gemini API first (free tier), then fallback to built-in
     try {
-      const categoryContext = {
-        business: 'business opportunities, startups, or entrepreneurial ventures',
-        writing: 'creative writing prompts, story ideas, or narrative concepts',
-        products: 'new product concepts, improvements, or market opportunities',
-        art: 'artistic projects, design concepts, or creative visual ideas',
-        solutions: 'practical solutions to everyday problems or challenges',
-        stories: 'engaging story concepts, plot ideas, or narrative themes',
-      };
-
-      // Using Hugging Face's free API (Mixtral model)
-      const prompt = `Generate 5-7 creative and practical ideas that combine the words "${word1}" and "${word2}" for ${categoryContext[selectedCategory]}. 
-
-Make the ideas:
-- Innovative and unique
-- Practical and achievable
-- Each idea should have a clear title followed by a detailed explanation
-- Varied in scope and approach
-
-Format your response as a numbered list where each entry follows this exact format:
-"1. [Idea Title] - [Detailed explanation of the idea in 1-2 sentences]"
-
-Example format:
-"1. Smart Garden Monitor - A device that combines sensors and AI to automatically track soil moisture, light levels, and plant health, sending notifications to your phone when your plants need attention."
-
-Make sure every idea has both a title AND a description separated by " - "`;
-
-      const response = await fetch("https://api-inference.huggingface.co/models/mistralai/Mixtral-8x7B-Instruct-v0.1", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          // Note: Users will need to get their own free API key from Hugging Face
-        },
-        body: JSON.stringify({
-          inputs: prompt,
-          parameters: {
-            max_new_tokens: 1000,
-            temperature: 0.7,
-            top_p: 0.9,
-            return_full_text: false
-          }
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error('API request failed');
-      }
-
-      const data = await response.json();
-      const generatedText = data[0]?.generated_text || data.generated_text || '';
-      
-      if (generatedText) {
-        setIdeas(generatedText);
-      } else {
-        // Fallback to local generation if API fails
-        generateLocalIdeas();
-      }
+      // First attempt: Google Gemini API (free tier)
+      await tryGeminiAPI();
     } catch (error) {
-      console.log('API failed, using local generation:', error);
+      console.log('Gemini API failed, using built-in generation:', error);
       generateLocalIdeas();
     } finally {
       setIsLoading(false);
     }
   };
 
+  const tryGeminiAPI = async () => {
+    const categoryContext = {
+      business: 'business opportunities, startups, or entrepreneurial ventures',
+      writing: 'creative writing prompts, story ideas, or narrative concepts',
+      products: 'new product concepts, improvements, or market opportunities',
+      art: 'artistic projects, design concepts, or creative visual ideas',
+      solutions: 'practical solutions to everyday problems or challenges',
+      stories: 'engaging story concepts, plot ideas, or narrative themes',
+    };
+
+    const prompt = `Generate 6 creative and practical ideas that combine "${word1}" and "${word2}" for ${categoryContext[selectedCategory]}.
+
+Requirements:
+- Each idea should be innovative yet achievable
+- Include a catchy title and 1-2 sentence description
+- Make them diverse in approach and scope
+- Format: "Title - Description"
+
+Examples:
+"Smart Garden Monitor - A device that combines sensors and AI to track soil moisture and plant health."
+"Ocean Cleanup Robot - An autonomous marine vehicle that removes plastic waste while mapping ocean currents."`;
+
+    // Try Google Gemini API (free tier available)
+    const geminiResponse = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // Note: Users can get free API key from Google AI Studio
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{ text: prompt }]
+        }],
+        generationConfig: {
+          temperature: 0.8,
+          maxOutputTokens: 800,
+        }
+      })
+    });
+
+    if (geminiResponse.ok) {
+      const geminiData = await geminiResponse.json();
+      const generatedText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
+      
+      if (generatedText) {
+        // Format the response to ensure consistency
+        const formattedIdeas = formatGeminiResponse(generatedText);
+        setIdeas(formattedIdeas);
+        return;
+      }
+    }
+    
+    throw new Error('Gemini API failed');
+  };
+
+  const formatGeminiResponse = (text) => {
+    // Clean and format Gemini response to match expected format
+    const lines = text.split('\n').filter(line => line.trim());
+    const formattedLines = [];
+    let counter = 1;
+
+    for (const line of lines) {
+      const cleaned = line.trim().replace(/^\d+\.?\s*/, '').replace(/^\*\s*/, '');
+      if (cleaned && cleaned.length > 10) {
+        formattedLines.push(`${counter}. ${cleaned}`);
+        counter++;
+        if (counter > 6) break; // Limit to 6 ideas
+      }
+    }
+
+    return formattedLines.join('\n');
+  };
+
   const generateLocalIdeas = () => {
+    // Comprehensive built-in idea generation with multiple templates and variations
+    const combinationPatterns = [
+      'fusion', 'hybrid', 'smart', 'eco', 'digital', 'virtual', 'bio', 'nano', 'micro', 'mega',
+      'ultra', 'super', 'meta', 'neo', 'proto', 'auto', 'tele', 'multi', 'omni', 'uni'
+    ];
+
+    const actionWords = [
+      'connect', 'transform', 'enhance', 'optimize', 'integrate', 'revolutionize', 'streamline',
+      'amplify', 'synchronize', 'harmonize', 'catalyze', 'energize', 'modernize', 'personalize'
+    ];
+
+    const businessSuffixes = [
+      'Solutions', 'Systems', 'Platform', 'Hub', 'Network', 'Studio', 'Lab', 'Works', 'Forge',
+      'Academy', 'Institute', 'Collective', 'Alliance', 'Exchange', 'Center', 'Space'
+    ];
+
     const ideaTemplates = {
       business: [
-        `${word1.charAt(0).toUpperCase() + word1.slice(1)} ${word2.charAt(0).toUpperCase() + word2.slice(1)} Solutions - A consulting firm that specializes in combining ${word1} expertise with ${word2} innovation to help businesses solve complex challenges.`,
-        `${word2.charAt(0).toUpperCase() + word2.slice(1)}-Powered ${word1.charAt(0).toUpperCase() + word1.slice(1)} Platform - An online marketplace that connects ${word1} enthusiasts with ${word2}-enhanced services and products.`,
-        `The ${word1.charAt(0).toUpperCase() + word1.slice(1)} & ${word2.charAt(0).toUpperCase() + word2.slice(1)} Academy - An educational institution offering courses that blend traditional ${word1} knowledge with modern ${word2} techniques.`,
-        `Smart${word1.charAt(0).toUpperCase() + word1.slice(1)} ${word2.charAt(0).toUpperCase() + word2.slice(1)} App - A mobile application that uses ${word2} technology to optimize ${word1}-related activities for maximum efficiency.`,
-        `${word1.charAt(0).toUpperCase() + word1.slice(1)}Fusion ${word2.charAt(0).toUpperCase() + word2.slice(1)} Service - A subscription service that delivers personalized ${word1} experiences enhanced by cutting-edge ${word2} innovations.`
+        () => `${word1.charAt(0).toUpperCase() + word1.slice(1)}${word2.charAt(0).toUpperCase() + word2.slice(1)} ${businessSuffixes[Math.floor(Math.random() * businessSuffixes.length)]} - A ${getRandomElement(['consulting', 'technology', 'innovation', 'service'])} company that specializes in ${actionWords[Math.floor(Math.random() * actionWords.length)]}ing ${word1} through ${word2} integration for ${getRandomElement(['startups', 'enterprises', 'SMEs', 'organizations'])}.`,
+        
+        () => `${getRandomElement(combinationPatterns).charAt(0).toUpperCase() + getRandomElement(combinationPatterns).slice(1)} ${word1.charAt(0).toUpperCase() + word1.slice(1)} ${word2.charAt(0).toUpperCase() + word2.slice(1)} App - A ${getRandomElement(['mobile', 'web', 'desktop', 'cloud'])} application that uses ${word2} ${getRandomElement(['technology', 'principles', 'methods', 'algorithms'])} to ${actionWords[Math.floor(Math.random() * actionWords.length)]} ${word1}-related ${getRandomElement(['processes', 'workflows', 'operations', 'activities'])}.`,
+        
+        () => `The ${word1.charAt(0).toUpperCase() + word1.slice(1)} & ${word2.charAt(0).toUpperCase() + word2.slice(1)} Marketplace - An online platform connecting ${word1} ${getRandomElement(['specialists', 'enthusiasts', 'professionals', 'experts'])} with ${word2}-enhanced ${getRandomElement(['services', 'products', 'solutions', 'experiences'])} for ${getRandomElement(['consumers', 'businesses', 'communities', 'industries'])}.`,
+        
+        () => `${word1.charAt(0).toUpperCase() + word1.slice(1)}Fusion ${word2.charAt(0).toUpperCase() + word2.slice(1)} Subscription - A ${getRandomElement(['monthly', 'quarterly', 'annual', 'premium'])} service delivering curated ${word1} experiences enhanced by cutting-edge ${word2} ${getRandomElement(['innovations', 'technologies', 'methodologies', 'insights'])}.`,
+        
+        () => `Smart${word1.charAt(0).toUpperCase() + word1.slice(1)} ${word2.charAt(0).toUpperCase() + word2.slice(1)} Analytics - A ${getRandomElement(['SaaS', 'cloud-based', 'AI-powered', 'data-driven'])} platform that provides ${getRandomElement(['real-time', 'predictive', 'comprehensive', 'actionable'])} insights by combining ${word1} data with ${word2} intelligence.`,
+
+        () => `${word1.charAt(0).toUpperCase() + word1.slice(1)} ${word2.charAt(0).toUpperCase() + word2.slice(1)} Academy - An ${getRandomElement(['online', 'hybrid', 'immersive', 'interactive'])} educational platform offering ${getRandomElement(['courses', 'workshops', 'certifications', 'masterclasses'])} that blend traditional ${word1} knowledge with modern ${word2} techniques.`
       ],
+
       writing: [
-        `The ${word1.charAt(0).toUpperCase() + word1.slice(1)} ${word2.charAt(0).toUpperCase() + word2.slice(1)} Chronicles - A fantasy series where ancient ${word1} magic collides with futuristic ${word2} technology in an epic battle for the fate of two worlds.`,
-        `${word2.charAt(0).toUpperCase() + word2.slice(1)} in the ${word1.charAt(0).toUpperCase() + word1.slice(1)} - A mystery novel about a detective who uses ${word2} to solve crimes in a world where ${word1} holds the key to every mystery.`,
-        `The Last ${word1.charAt(0).toUpperCase() + word1.slice(1)} ${word2.charAt(0).toUpperCase() + word2.slice(1)} - A post-apocalyptic story where the protagonist must master both ${word1} and ${word2} to survive in a changed world.`,
-        `${word1.charAt(0).toUpperCase() + word1.slice(1)} Meets ${word2.charAt(0).toUpperCase() + word2.slice(1)} - A romantic comedy about two unlikely characters who discover their shared passion for combining ${word1} with ${word2}.`,
-        `The ${word1.charAt(0).toUpperCase() + word1.slice(1)} ${word2.charAt(0).toUpperCase() + word2.slice(1)} Diaries - A coming-of-age story following a young person's journey to master the art of blending ${word1} traditions with ${word2} innovation.`
+        () => `The ${word1.charAt(0).toUpperCase() + word1.slice(1)} ${word2.charAt(0).toUpperCase() + word2.slice(1)} Chronicles - A ${getRandomElement(['fantasy', 'sci-fi', 'adventure', 'thriller'])} series where ${getRandomElement(['ancient', 'mystical', 'forbidden', 'legendary'])} ${word1} ${getRandomElement(['magic', 'power', 'wisdom', 'secrets'])} collides with ${getRandomElement(['futuristic', 'alien', 'quantum', 'digital'])} ${word2} technology.`,
+        
+        () => `${word2.charAt(0).toUpperCase() + word2.slice(1)} in the ${word1.charAt(0).toUpperCase() + word1.slice(1)} - A ${getRandomElement(['mystery', 'detective', 'noir', 'psychological'])} novel about a ${getRandomElement(['detective', 'investigator', 'researcher', 'explorer'])} who uses ${word2} to solve ${getRandomElement(['crimes', 'puzzles', 'mysteries', 'cases'])} in a world where ${word1} holds the key.`,
+        
+        () => `The Last ${word1.charAt(0).toUpperCase() + word1.slice(1)} ${word2.charAt(0).toUpperCase() + word2.slice(1)} - A ${getRandomElement(['post-apocalyptic', 'dystopian', 'survival', 'adventure'])} story where the protagonist must master both ${word1} and ${word2} to ${getRandomElement(['survive', 'rebuild', 'escape', 'save humanity'])} in a changed world.`,
+        
+        () => `${word1.charAt(0).toUpperCase() + word1.slice(1)} Meets ${word2.charAt(0).toUpperCase() + word2.slice(1)} - A ${getRandomElement(['romantic comedy', 'dramedy', 'slice-of-life', 'feel-good'])} about ${getRandomElement(['two unlikely characters', 'star-crossed lovers', 'best friends', 'rivals'])} who discover their shared passion for combining ${word1} with ${word2}.`,
+        
+        () => `The ${word1.charAt(0).toUpperCase() + word1.slice(1)} ${word2.charAt(0).toUpperCase() + word2.slice(1)} Diaries - A ${getRandomElement(['coming-of-age', 'bildungsroman', 'memoir-style', 'epistolary'])} story following a ${getRandomElement(['young person', 'teenager', 'student', 'apprentice'])} mastering the art of blending ${word1} traditions with ${word2} innovation.`,
+
+        () => `Echoes of ${word1.charAt(0).toUpperCase() + word1.slice(1)}, Whispers of ${word2.charAt(0).toUpperCase() + word2.slice(1)} - A ${getRandomElement(['magical realism', 'literary fiction', 'speculative', 'philosophical'])} novel exploring how ${word1} and ${word2} shape ${getRandomElement(['identity', 'memory', 'destiny', 'consciousness'])} across generations.`
       ],
+
       products: [
-        `${word1.charAt(0).toUpperCase() + word1.slice(1)}${word2.charAt(0).toUpperCase() + word2.slice(1)} Pro - An innovative device that combines the functionality of ${word1} with the convenience of ${word2} for everyday use.`,
-        `Smart ${word1.charAt(0).toUpperCase() + word1.slice(1)} with ${word2.charAt(0).toUpperCase() + word2.slice(1)} Integration - A next-generation product that revolutionizes how people interact with ${word1} through ${word2} technology.`,
-        `The ${word1.charAt(0).toUpperCase() + word1.slice(1)} ${word2.charAt(0).toUpperCase() + word2.slice(1)} Kit - A comprehensive starter package that teaches users how to effectively combine ${word1} and ${word2} in their daily routine.`,
-        `Eco-${word1.charAt(0).toUpperCase() + word1.slice(1)} ${word2.charAt(0).toUpperCase() + word2.slice(1)} System - A sustainable solution that uses ${word2} principles to enhance traditional ${word1} applications while reducing environmental impact.`,
-        `Portable ${word1.charAt(0).toUpperCase() + word1.slice(1)} ${word2.charAt(0).toUpperCase() + word2.slice(1)} Station - A compact, user-friendly device that brings the benefits of ${word1} and ${word2} integration directly to consumers.`
+        () => `${getRandomElement(combinationPatterns).charAt(0).toUpperCase() + getRandomElement(combinationPatterns).slice(1)}${word1.charAt(0).toUpperCase() + word1.slice(1)} ${word2.charAt(0).toUpperCase() + word2.slice(1)} ${getRandomElement(['Pro', 'Max', 'Elite', 'Plus', 'Prime'])} - An innovative ${getRandomElement(['device', 'gadget', 'tool', 'system'])} that combines the ${getRandomElement(['functionality', 'benefits', 'power', 'efficiency'])} of ${word1} with the ${getRandomElement(['convenience', 'intelligence', 'precision', 'versatility'])} of ${word2}.`,
+        
+        () => `The ${word1.charAt(0).toUpperCase() + word1.slice(1)} ${word2.charAt(0).toUpperCase() + word2.slice(1)} ${getRandomElement(['Kit', 'Set', 'Bundle', 'Collection'])} - A comprehensive ${getRandomElement(['starter package', 'toolkit', 'solution set', 'system'])} that teaches users how to effectively ${getRandomElement(['integrate', 'combine', 'master', 'optimize'])} ${word1} and ${word2} in their ${getRandomElement(['daily routine', 'workflow', 'lifestyle', 'practice'])}.`,
+        
+        () => `Eco-${word1.charAt(0).toUpperCase() + word1.slice(1)} ${word2.charAt(0).toUpperCase() + word2.slice(1)} ${getRandomElement(['System', 'Solution', 'Platform', 'Network'])} - A sustainable ${getRandomElement(['product', 'service', 'technology', 'innovation'])} that uses ${word2} principles to enhance traditional ${word1} applications while ${getRandomElement(['reducing environmental impact', 'promoting sustainability', 'conserving resources', 'supporting green living'])}.`,
+        
+        () => `Portable ${word1.charAt(0).toUpperCase() + word1.slice(1)} ${word2.charAt(0).toUpperCase() + word2.slice(1)} ${getRandomElement(['Station', 'Hub', 'Center', 'Base'])} - A ${getRandomElement(['compact', 'lightweight', 'foldable', 'modular'])} device that brings the benefits of ${word1} and ${word2} integration directly to ${getRandomElement(['consumers', 'professionals', 'travelers', 'enthusiasts'])}.`,
+        
+        () => `AI-Powered ${word1.charAt(0).toUpperCase() + word1.slice(1)} ${word2.charAt(0).toUpperCase() + word2.slice(1)} Assistant - A ${getRandomElement(['smart', 'intelligent', 'adaptive', 'learning'])} companion that ${getRandomElement(['monitors', 'optimizes', 'enhances', 'personalizes'])} your ${word1} activities using advanced ${word2} ${getRandomElement(['algorithms', 'sensors', 'analytics', 'intelligence'])}.`,
+
+        () => `${word1.charAt(0).toUpperCase() + word1.slice(1)}Sync ${word2.charAt(0).toUpperCase() + word2.slice(1)} Wearable - A ${getRandomElement(['stylish', 'comfortable', 'advanced', 'intuitive'])} wearable device that seamlessly integrates ${word1} ${getRandomElement(['monitoring', 'tracking', 'optimization', 'enhancement'])} with ${word2} ${getRandomElement(['feedback', 'coaching', 'insights', 'recommendations'])}.`
       ],
+
       art: [
-        `${word1.charAt(0).toUpperCase() + word1.slice(1)} Meets ${word2.charAt(0).toUpperCase() + word2.slice(1)} Installation - An interactive art piece that invites viewers to explore the relationship between ${word1} and ${word2} through immersive experience.`,
-        `Digital ${word1.charAt(0).toUpperCase() + word1.slice(1)} ${word2.charAt(0).toUpperCase() + word2.slice(1)} Gallery - A virtual exhibition space showcasing how contemporary artists interpret the fusion of ${word1} and ${word2} in modern society.`,
-        `The ${word1.charAt(0).toUpperCase() + word1.slice(1)} ${word2.charAt(0).toUpperCase() + word2.slice(1)} Project - A collaborative art initiative where multiple artists create works inspired by the intersection of ${word1} and ${word2}.`,
-        `${word2.charAt(0).toUpperCase() + word2.slice(1)}-Inspired ${word1.charAt(0).toUpperCase() + word1.slice(1)} Sculptures - A series of physical artworks that use ${word2} aesthetics to reimagine traditional ${word1} forms.`,
-        `Interactive ${word1.charAt(0).toUpperCase() + word1.slice(1)} ${word2.charAt(0).toUpperCase() + word2.slice(1)} Workshop - A hands-on art experience where participants create their own pieces combining elements of ${word1} and ${word2}.`
+        () => `${word1.charAt(0).toUpperCase() + word1.slice(1)} Meets ${word2.charAt(0).toUpperCase() + word2.slice(1)} ${getRandomElement(['Installation', 'Exhibition', 'Experience', 'Gallery'])} - An ${getRandomElement(['interactive', 'immersive', 'multimedia', 'participatory'])} art piece that invites viewers to explore the ${getRandomElement(['relationship', 'tension', 'harmony', 'dialogue'])} between ${word1} and ${word2} through ${getRandomElement(['sensory', 'digital', 'tactile', 'visual'])} experience.`,
+        
+        () => `The ${word1.charAt(0).toUpperCase() + word1.slice(1)} ${word2.charAt(0).toUpperCase() + word2.slice(1)} ${getRandomElement(['Project', 'Initiative', 'Movement', 'Collective'])} - A ${getRandomElement(['collaborative', 'community-driven', 'cross-cultural', 'interdisciplinary'])} art initiative where ${getRandomElement(['multiple artists', 'creators worldwide', 'diverse voices', 'emerging talents'])} create works inspired by the intersection of ${word1} and ${word2}.`,
+        
+        () => `${word2.charAt(0).toUpperCase() + word2.slice(1)}-Inspired ${word1.charAt(0).toUpperCase() + word1.slice(1)} ${getRandomElement(['Sculptures', 'Paintings', 'Installations', 'Artworks'])} - A series of ${getRandomElement(['contemporary', 'abstract', 'minimalist', 'expressive'])} artworks that use ${word2} ${getRandomElement(['aesthetics', 'principles', 'forms', 'concepts'])} to reimagine traditional ${word1} ${getRandomElement(['representations', 'symbolism', 'imagery', 'themes'])}.`,
+        
+        () => `Digital ${word1.charAt(0).toUpperCase() + word1.slice(1)} ${word2.charAt(0).toUpperCase() + word2.slice(1)} ${getRandomElement(['Museum', 'Archive', 'Gallery', 'Collection'])} - A ${getRandomElement(['virtual', 'online', 'augmented reality', 'metaverse'])} exhibition space showcasing how ${getRandomElement(['contemporary', 'emerging', 'international', 'innovative'])} artists interpret the fusion of ${word1} and ${word2}.`,
+        
+        () => `Interactive ${word1.charAt(0).toUpperCase() + word1.slice(1)} ${word2.charAt(0).toUpperCase() + word2.slice(1)} ${getRandomElement(['Workshop', 'Studio', 'Lab', 'Space'])} - A ${getRandomElement(['hands-on', 'creative', 'educational', 'experimental'])} art experience where participants create their own pieces combining elements of ${word1} and ${word2} using ${getRandomElement(['traditional techniques', 'digital tools', 'mixed media', 'innovative methods'])}.`,
+
+        () => `The ${word1.charAt(0).toUpperCase() + word1.slice(1)} ${word2.charAt(0).toUpperCase() + word2.slice(1)} ${getRandomElement(['Festival', 'Biennial', 'Showcase', 'Celebration'])} - An ${getRandomElement(['annual', 'international', 'traveling', 'immersive'])} art event celebrating the ${getRandomElement(['convergence', 'dialogue', 'synthesis', 'evolution'])} of ${word1} and ${word2} through ${getRandomElement(['performances', 'installations', 'workshops', 'exhibitions'])}.`
       ],
+
       solutions: [
         `${word1.charAt(0).toUpperCase() + word1.slice(1)}-Enhanced ${word2.charAt(0).toUpperCase() + word2.slice(1)} System - A practical solution that uses ${word1} principles to improve the efficiency and effectiveness of ${word2} applications.`,
         `The ${word1.charAt(0).toUpperCase() + word1.slice(1)} ${word2.charAt(0).toUpperCase() + word2.slice(1)} Method - A step-by-step approach that helps people solve common problems by combining the strengths of ${word1} and ${word2}.`,
@@ -219,9 +284,9 @@ Make sure every idea has both a title AND a description separated by " - "`;
           
           {/* Hero Section */}
           <div className="text-center mb-8 sm:mb-12">
-            <div className="inline-flex items-center bg-blue-50 text-blue-700 px-4 py-2 rounded-full text-sm font-medium mb-6">
+            <div className="inline-flex items-center bg-green-50 text-green-700 px-4 py-2 rounded-full text-sm font-medium mb-6">
               <Sparkles className="w-4 h-4 mr-2" />
-              Transform Two Words into Endless Possibilities
+              No Sign-ups • No API Keys • Always Free
             </div>
             <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-slate-900 mb-4 leading-tight">
               Where Creativity Meets
